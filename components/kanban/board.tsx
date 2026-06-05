@@ -45,10 +45,12 @@ export function KanbanBoard() {
   const { data: jobs = [], isLoading } = useQuery({
     queryKey: ['job_listings'],
     queryFn: async () => {
-      const { data } = await supabaseClient
-        .from('job_listings')
-        .select('id, company, role, status, nexus_score, verdict')
-      return data as JobListing[]
+        const { data: { session } } = await supabaseClient.auth.getSession()
+        const { data } = await supabaseClient
+          .from('job_listings')
+          .select('id, company, role, status, nexus_score, verdict')
+          .eq('user_id', session?.user.id)
+        return data as JobListing[]
     },
   })
 
