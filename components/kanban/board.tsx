@@ -25,6 +25,22 @@ type JobListing = {
   verdict: string | null
 }
 
+function getStatusColour(status: string) {
+  const map: Record<string, string> = {
+    CAPTURED: 'bg-zinc-700 text-zinc-300',
+    SCOUTING: 'bg-blue-900 text-blue-300',
+    ANALYSING: 'bg-purple-900 text-purple-300',
+    AUDITING: 'bg-yellow-900 text-yellow-300',
+    RED_FLAG_DETECTED: 'bg-red-900 text-red-300',
+    AUDIT_PASSED: 'bg-green-900 text-green-300',
+    SCORING: 'bg-teal-900 text-teal-300',
+    PROCEED: 'bg-green-900 text-green-300',
+    OBSERVE: 'bg-yellow-900 text-yellow-300',
+    DISCARD: 'bg-red-900 text-red-300',
+  }
+  return map[status] ?? 'bg-zinc-700 text-zinc-300'
+}
+
 export function KanbanBoard() {
   const { data: jobs = [], isLoading } = useQuery({
     queryKey: ['job_listings'],
@@ -64,7 +80,10 @@ export function KanbanBoard() {
                           className="bg-zinc-800 rounded p-3 mb-2"
                         >
                           <p className="text-sm font-medium">{job.company}</p>
-                          <p className="text-xs text-zinc-400">{job.role}</p>
+                          <p className="text-xs text-zinc-400 mb-2">{job.role}</p>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getStatusColour(job.status)}`}>
+                            {job.status.replace('_', ' ')}
+                          </span>
                         </div>
                       )}
                     </Draggable>
