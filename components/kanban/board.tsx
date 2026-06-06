@@ -11,6 +11,15 @@ import {
   Draggable,
   type DropResult,
 } from '@hello-pangea/dnd'
+import {
+  Bar,
+  BarChart,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+} from 'recharts'
 
 const COLUMNS = [
   'CAPTURED',
@@ -51,6 +60,14 @@ type AgentLog = {
   reasoning: string
   created_at: string
 }
+
+type AnalyticsListing = {
+  id: string
+  status: string
+  created_at: string
+}
+
+const AXIS_TICK = { fill: MUTED, fontSize: 10, fontFamily: FONT }
 
 function reorderJobs(
   jobs: JobListing[],
@@ -114,6 +131,182 @@ function ExternalLinkIcon() {
         strokeWidth="1"
       />
     </svg>
+  )
+}
+
+function AnalyticsOverlay({ onClose }: { onClose: () => void }) {
+  const { data: listings = [], isLoading } = useQuery({
+    queryKey: ['analytics_listings'],
+    queryFn: async () => {
+      const { data: { session } } = await supabaseClient.auth.getSession()
+      if (!session?.user.id) return []
+      const { data } = await supabaseClient
+        .from('job_listings')
+        .select('id, status, created_at')
+        .eq('user_id', session.user.id)
+      return (data ?? []) as AnalyticsListing[]
+    },
+  })
+
+  const statusData = COLUMNS.map((col) => ({
+    status: col.replace(/_/g, ' '),
+    count: listings.filter((l) => l.status === col).length,
+  }))
+
+  const cumulativeData = (() => {
+    const byDate: Record<string, number> = {}
+    for (const l of listings) {
+      const date = l.created_at.slice(0, 10)
+      byDate[date] = (byDate[date] || 0) + 1
+    }
+    let cumulative = 0
+    return Object.keys(byDate)
+      .sort()
+      .map((date) => {
+        cumulative += byDate[date]
+        return { date, count: cumulative }
+      })
+  })()
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+
+  return (
+    <div
+      role="presentation"
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 500,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: FONT,
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="analytics-title"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: '700px',
+          maxHeight: '80vh',
+          background: CARD_BG,
+          border: '1px solid #222',
+          borderRadius: 0,
+          overflowY: 'auto',
+          padding: '24px',
+        }}
+      >
+        <h2
+          id="analytics-title"
+          style={{
+            fontSize: '11px',
+            fontWeight: 600,
+            letterSpacing: '0.15em',
+            textTransform: 'uppercase',
+            color: FG,
+            margin: '0 0 24px 0',
+          }}
+        >
+          Analytics
+        </h2>
+
+        {isLoading ? (
+          <p
+            style={{
+              fontSize: '10px',
+              color: MUTED,
+              letterSpacing: '0.1em',
+              margin: 0,
+            }}
+          >
+            LOADING...
+          </p>
+        ) : (
+          <>
+            <p
+              style={{
+                fontSize: '10px',
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                color: MUTED,
+                margin: '0 0 12px 0',
+              }}
+            >
+              Status breakdown
+            </p>
+            <div style={{ background: BG, marginBottom: '32px' }}>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={statusData}>
+                  <XAxis
+                    dataKey="status"
+                    tick={AXIS_TICK}
+                    axisLine={{ stroke: '#222' }}
+                    tickLine={false}
+                    interval={0}
+                    angle={-35}
+                    textAnchor="end"
+                    height={60}
+                  />
+                  <YAxis
+                    tick={AXIS_TICK}
+                    axisLine={{ stroke: '#222' }}
+                    tickLine={false}
+                    allowDecimals={false}
+                  />
+                  <Bar dataKey="count" fill={ACCENT} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <p
+              style={{
+                fontSize: '10px',
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                color: MUTED,
+                margin: '0 0 12px 0',
+              }}
+            >
+              Applications over time
+            </p>
+            <div style={{ background: BG }}>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={cumulativeData}>
+                  <XAxis
+                    dataKey="date"
+                    tick={AXIS_TICK}
+                    axisLine={{ stroke: '#222' }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={AXIS_TICK}
+                    axisLine={{ stroke: '#222' }}
+                    tickLine={false}
+                    allowDecimals={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="count"
+                    stroke={ACCENT}
+                    dot={false}
+                    strokeWidth={2}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -457,6 +650,7 @@ export function KanbanBoard() {
   const [isDragging, setIsDragging] = useState(false)
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null)
   const [jobs, setJobs] = useState<JobListing[]>([])
+  const [showAnalytics, setShowAnalytics] = useState(false)
   const isDraggingRef = useRef(false)
 
   useEffect(() => {
@@ -585,6 +779,7 @@ export function KanbanBoard() {
           background: BG,
           color: FG,
           fontFamily: FONT,
+          filter: showAnalytics ? 'blur(4px)' : undefined,
         }}
       >
         <header
@@ -627,6 +822,31 @@ export function KanbanBoard() {
                 {userEmail}
               </span>
             )}
+            <button
+              type="button"
+              onClick={() => setShowAnalytics(true)}
+              style={{
+                fontFamily: FONT,
+                fontSize: '10px',
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                color: MUTED,
+                background: 'transparent',
+                border: '1px solid #222222',
+                padding: '4px 10px',
+                cursor: 'pointer',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = ACCENT
+                e.currentTarget.style.color = ACCENT
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = '#222222'
+                e.currentTarget.style.color = MUTED
+              }}
+            >
+              ANALYTICS
+            </button>
             <button
               type="button"
               onClick={handleLogout}
@@ -959,6 +1179,10 @@ export function KanbanBoard() {
           job={modalJob}
           onClose={() => setModalJob(null)}
         />
+      )}
+
+      {showAnalytics && (
+        <AnalyticsOverlay onClose={() => setShowAnalytics(false)} />
       )}
     </>
   )
