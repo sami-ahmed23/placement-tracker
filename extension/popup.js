@@ -1,4 +1,4 @@
-const INGEST_URL = 'http://localhost:3000/api/ingest'
+const INGEST_URL = 'https://placement-tracker-azure-one.vercel.app/api/ingest'
 
 document.getElementById('capture').addEventListener('click', async () => {
   const email = document.getElementById('email').value
